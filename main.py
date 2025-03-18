@@ -4,7 +4,13 @@ from exa_py import Exa
 from firecrawl import FirecrawlApp
 from openai import OpenAI
 
+# --- CONFIG ---
+EXA_API_KEY = 'YOUR KEY' # You can get yours here: https://dashboard.exa.ai/api-keys
+FIRECRAWL_API_KEY = 'YOUR KEY' # You can get yours here: https://www.firecrawl.dev/app/api-keys
+OPENAI_API_KEY = 'YOUR KEY' # You can get yours here: https://platform.openai.com/api-keys
+
 client = OpenAI(api_key=OPENAI_API_KEY)
+
 import logging
 
 # Set up logging
