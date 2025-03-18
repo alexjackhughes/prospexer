@@ -5,9 +5,9 @@ from firecrawl import FirecrawlApp
 from openai import OpenAI
 
 # --- CONFIG ---
-EXA_API_KEY = 'YOUR KEY' # You can get yours here: https://dashboard.exa.ai/api-keys
-FIRECRAWL_API_KEY = 'YOUR KEY' # You can get yours here: https://www.firecrawl.dev/app/api-keys
-OPENAI_API_KEY = 'YOUR KEY' # You can get yours here: https://platform.openai.com/api-keys
+EXA_API_KEY = "YOUR KEY" # You can get yours here: https://dashboard.exa.ai/api-keys
+FIRECRAWL_API_KEY = "YOUR KEY" # You can get yours here: https://www.firecrawl.dev/app/api-keys
+OPENAI_API_KEY = "YOUR KEY" # You can get yours here: https://platform.openai.com/api-keys
 
 client = OpenAI(api_key=OPENAI_API_KEY)
 
@@ -77,7 +77,8 @@ def extract_contacts_from_text(text: str) -> list:
     logger.info("Extracting contacts using OpenAI")
     prompt = f"""
 Extract any team members' details from the following text.
-Return each person in JSON lines, with keys: Name, Job Title, Company, Contact Info.
+Return a JSON array of objects, where each object has these keys: Name, Job Title, Company, Contact Info.
+Format the response as a single valid JSON array.
 
 Text:
 {text}
@@ -87,26 +88,21 @@ Text:
         messages=[{"role": "user", "content": prompt}],
         temperature=0)
 
-        # You can refine how you parse the response based on how you instruct the model.
-        raw_output = response.choices[0].message.content
+        # Get the response content
+        raw_output = response.choices[0].message.content.strip()
 
-        # Very rough example: if the model returns valid JSON lines, parse them.
-        # Real usage might require robust JSON parsing or a more structured approach.
-        contacts = []
-        for line in raw_output.splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                data = eval(line)  # or use json.loads if valid JSON
-                if isinstance(data, dict):
-                    contacts.append(data)
-            except Exception as e:
-                logger.warning(f"Failed to parse contact line: {line}. Error: {str(e)}")
-                pass
+        # Try to parse the entire response as JSON
+        try:
+            import json
+            contacts = json.loads(raw_output)
+            if not isinstance(contacts, list):
+                contacts = [contacts]  # Convert single object to list
+            logger.info(f"Successfully extracted {len(contacts)} contacts")
+            return contacts
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse JSON response: {str(e)}")
+            return []
 
-        logger.info(f"Successfully extracted {len(contacts)} contacts")
-        return contacts
     except Exception as e:
         logger.error(f"Error during OpenAI contact extraction: {str(e)}")
         return []
@@ -122,7 +118,14 @@ def main():
         logger.error(f"Failed to load data.csv: {str(e)}")
         return
 
-    all_contacts = []
+    # Create or load existing results file
+    try:
+        results_df = pd.read_csv('results.csv')
+        logger.info("Loaded existing results.csv file")
+    except FileNotFoundError:
+        results_df = pd.DataFrame(columns=['Name', 'Job Title', 'Company', 'Contact Info'])
+        results_df.to_csv('results.csv', index=False)
+        logger.info("Created new results.csv file")
 
     for idx, row in df.iterrows():
         vc_name = row['name']
@@ -137,26 +140,26 @@ def main():
         # 3) Use OpenAI to extract contact info
         contacts = extract_contacts_from_text(page_markdown)
 
-        # 4) Collect results
-        for c in contacts:
-            # Ensure the keys exist
-            all_contacts.append({
-                'Name': c.get('Name', ''),
-                'Job Title': c.get('Job Title', ''),
-                'Company': c.get('Company', vc_name),  # default to the VC name if not found
-                'Contact Info': c.get('Contact Info', '')
-            })
+        # 4) Process and save results immediately
+        if contacts:
+            new_contacts = []
+            for c in contacts:
+                new_contacts.append({
+                    'Name': c.get('Name', ''),
+                    'Job Title': c.get('Job Title', ''),
+                    'Company': c.get('Company', vc_name),  # default to the VC name if not found
+                    'Contact Info': c.get('Contact Info', '')
+                })
 
-    # Save results to results.csv
-    if all_contacts:
-        try:
-            results_df = pd.DataFrame(all_contacts)
+            # Append new contacts to results and save immediately
+            new_df = pd.DataFrame(new_contacts)
+            results_df = pd.concat([results_df, new_df], ignore_index=True)
             results_df.to_csv('results.csv', index=False)
-            logger.info(f"Successfully saved {len(all_contacts)} contacts to results.csv")
-        except Exception as e:
-            logger.error(f"Failed to save results.csv: {str(e)}")
-    else:
-        logger.warning("No contacts found to save")
+            logger.info(f"Saved {len(new_contacts)} contacts for {vc_name} to results.csv")
+        else:
+            logger.warning(f"No contacts found for {vc_name}")
+
+    logger.info("Completed processing all VCs")
 
 if __name__ == "__main__":
     main()
