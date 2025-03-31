@@ -9,6 +9,7 @@ EXA_API_KEY = "YOUR KEY" # You can get yours here: https://dashboard.exa.ai/api-
 FIRECRAWL_API_KEY = "YOUR KEY" # You can get yours here: https://www.firecrawl.dev/app/api-keys
 OPENAI_API_KEY = "YOUR KEY" # You can get yours here: https://platform.openai.com/api-keys
 
+
 client = OpenAI(api_key=OPENAI_API_KEY)
 
 import logging
@@ -77,7 +78,7 @@ def extract_contacts_from_text(text: str) -> list:
     logger.info("Extracting contacts using OpenAI")
     prompt = f"""
 Extract any team members' details from the following text.
-Return a JSON array of objects, where each object has these keys: Name, Job Title, Company, Contact Info.
+Return a JSON array of objects, where each object has these keys: Name, Job Title, Company, URL, LinkedIn, Phone, Email. If they don't have anything, just return an empty string for that key.
 Format the response as a single valid JSON array.
 
 Text:
@@ -123,7 +124,7 @@ def main():
         results_df = pd.read_csv('results.csv')
         logger.info("Loaded existing results.csv file")
     except FileNotFoundError:
-        results_df = pd.DataFrame(columns=['Name', 'Job Title', 'Company', 'Contact Info'])
+        results_df = pd.DataFrame(columns=['Name', 'Job Title', 'Company', 'URL', 'LinkedIn', 'Phone', 'Email'])
         results_df.to_csv('results.csv', index=False)
         logger.info("Created new results.csv file")
 
@@ -148,7 +149,10 @@ def main():
                     'Name': c.get('Name', ''),
                     'Job Title': c.get('Job Title', ''),
                     'Company': c.get('Company', vc_name),  # default to the VC name if not found
-                    'Contact Info': c.get('Contact Info', '')
+                    'URL': c.get('URL', team_url),
+                    'LinkedIn': c.get('LinkedIn', ''),
+                    'Phone': c.get('Phone', ''),
+                    'Email': c.get('Email', '')
                 })
 
             # Append new contacts to results and save immediately
