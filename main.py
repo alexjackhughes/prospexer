@@ -9,7 +9,6 @@ EXA_API_KEY = "YOUR KEY" # You can get yours here: https://dashboard.exa.ai/api-
 FIRECRAWL_API_KEY = "YOUR KEY" # You can get yours here: https://www.firecrawl.dev/app/api-keys
 OPENAI_API_KEY = "YOUR KEY" # You can get yours here: https://platform.openai.com/api-keys
 
-
 client = OpenAI(api_key=OPENAI_API_KEY)
 
 import logging
@@ -108,6 +107,24 @@ Text:
         logger.error(f"Error during OpenAI contact extraction: {str(e)}")
         return []
 
+def find_linkedin_profile(name: str, job_title: str, company: str) -> str:
+    """
+    Uses Exa to search for a person's LinkedIn profile.
+    Returns the LinkedIn URL if found, or empty string if not found.
+    """
+    logger.info(f"Searching for LinkedIn profile for: {name} at {company}")
+    query = f"{name} {job_title} {company} linkedin profile"
+    response = exa.search(query=query, type='auto', num_results=3)
+
+    if response.results and len(response.results) > 0:
+        # Look for LinkedIn URLs in the results
+        for result in response.results:
+            if 'linkedin.com/in/' in result.url.lower():
+                logger.info(f"Found LinkedIn profile: {result.url}")
+                return result.url
+    logger.warning(f"No LinkedIn profile found for {name}")
+    return ""
+
 def main():
     logger.info("Starting the contact extraction process")
 
@@ -128,6 +145,7 @@ def main():
         results_df.to_csv('results.csv', index=False)
         logger.info("Created new results.csv file")
 
+    # First, process all VCs and scrape contacts
     for idx, row in df.iterrows():
         vc_name = row['name']
         logger.info(f"Processing VC {idx + 1}/{len(df)}: {vc_name}")
@@ -164,6 +182,28 @@ def main():
             logger.warning(f"No contacts found for {vc_name}")
 
     logger.info("Completed processing all VCs")
+
+    # Now, process results.csv to find missing LinkedIn profiles
+    logger.info("Starting LinkedIn profile search for missing entries")
+    missing_linkedin = results_df[results_df['LinkedIn'].isna() | (results_df['LinkedIn'] == '')]
+
+    for idx, row in missing_linkedin.iterrows():
+        name = row['Name']
+        job_title = row['Job Title']
+        company = row['Company']
+
+        if name and job_title and company:  # Only search if we have all required fields
+            logger.info(f"Searching for LinkedIn profile for: {name}")
+            linkedin_url = find_linkedin_profile(name, job_title, company)
+
+            if linkedin_url:
+                # Update the LinkedIn URL in the results DataFrame
+                results_df.at[idx, 'LinkedIn'] = linkedin_url
+                # Save after each successful find
+                results_df.to_csv('results.csv', index=False)
+                logger.info(f"Updated LinkedIn URL for {name}")
+
+    logger.info("Completed LinkedIn profile search")
 
 if __name__ == "__main__":
     main()
